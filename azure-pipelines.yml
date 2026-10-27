@@ -38,10 +38,20 @@ stages:
             workingDirectory: backend
             displayName: Run Maven Build and Tests
 
+          - script: |
+              echo "=== sportwear-web target ==="
+              ls -lah sportwear-web/target
+
+              echo "=== JAR files ==="
+              find sportwear-web/target \
+                -maxdepth 1 -type f -name '*.jar' -print
+            workingDirectory: backend
+            displayName: Verify Spring Boot JAR
+
           - task: CopyFiles@2
             displayName: Prepare JAR Artifact
             inputs:
-              SourceFolder: '$(Build.SourcesDirectory)/backend/target'
+              SourceFolder: '$(Build.SourcesDirectory)/backend/sportwear-web/target'
               Contents: '*.jar'
               TargetFolder: '$(Build.ArtifactStagingDirectory)/backend'
 
