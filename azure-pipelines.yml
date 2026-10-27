@@ -1,0 +1,90 @@
+
+# Azure DevOps CD - Sportwear Shop
+# Simulation mode: no Azure resources required
+
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - backend/*
+      - backend/**/*
+      - azure-pipelines.yml
+
+pool:
+  vmImage: ubuntu-latest
+
+stages:
+  # Stage 1: Build and test backend
+  - stage: Build
+    displayName: Build Backend
+    jobs:
+      - job: BuildBackend
+        displayName: Build and Test Spring Boot
+        steps:
+          - checkout: self
+
+          - task: JavaToolInstaller@0
+            displayName: Set up Java 21
+            inputs:
+              versionSpec: '21'
+              jdkArchitectureOption: x64
+              jdkSourceOption: PreInstalled
+
+          - script: |
+              chmod +x mvnw
+              ./mvnw --batch-mode --no-transfer-progress clean verify
+            workingDirectory: backend
+            displayName: Run Maven Build and Tests
+
+          - task: CopyFiles@2
+            displayName: Prepare JAR Artifact
+            inputs:
+              SourceFolder: '$(Build.SourcesDirectory)/backend/target'
+              Contents: '*.jar'
+              TargetFolder: '$(Build.ArtifactStagingDirectory)/backend'
+
+          - task: PublishPipelineArtifact@1
+            displayName: Publish Backend Artifact
+            inputs:
+              targetPath: '$(Build.ArtifactStagingDirectory)/backend'
+              artifact: backend-package
+              publishLocation: pipeline
+
+  # Stage 2: Simulate deployment
+  - stage: MockDeploy
+    displayName: Simulate Deployment
+    dependsOn: Build
+    condition: succeeded()
+    jobs:
+      - job: DeploySimulation
+        displayName: Validate Deployment Package
+        steps:
+          - download: current
+            artifact: backend-package
+
+          - script: |
+              set -eu
+
+              ARTIFACT_DIR="$(Pipeline.Workspace)/backend-package"
+
+              echo "=== MOCK DEPLOYMENT ==="
+              echo "Target: Azure App Service"
+              echo "Mode: Simulation only"
+
+              JAR_COUNT=$(find "$ARTIFACT_DIR" \
+                -maxdepth 1 -type f -name '*.jar' | wc -l)
+
+              if [ "$JAR_COUNT" -ne 1 ]; then
+                echo "ERROR: Expected exactly one JAR file."
+                find "$ARTIFACT_DIR" -maxdepth 1 -type f
+                exit 1
+              fi
+
+              find "$ARTIFACT_DIR" \
+                -maxdepth 1 -type f -name '*.jar' -print
+
+              echo "Artifact validation passed."
+              echo "No Azure resources were created or modified."
+            displayName: Validate JAR and Simulate Deploy
